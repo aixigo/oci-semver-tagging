@@ -1,0 +1,15 @@
+[package]
+name = "oci-semver-tagging"
+version = "0.1.0"
+edition = "2021"
+
+[[bin]]
+name = "oci-semver-tagging"
+path = "src/main.rs"
+
+[dependencies]
+anyhow = "1.0"
+clap = { version = "4.5", features = ["derive"] }
+oci-distribution = { version = "0.11", default-features = false, features = ["rustls-tls"] }
+semver = "1.0"
+tokio = { version = "1.44", features = ["full"]}
