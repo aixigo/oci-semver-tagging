@@ -1,8 +1,8 @@
 use anyhow::{Context, Result};
 use oci_distribution::{secrets::RegistryAuth, Client, Reference};
 use semver::{Version, VersionReq};
-use tokio::task::JoinSet;
 use std::str::FromStr as _;
+use tokio::task::JoinSet;
 
 pub async fn tag(
     client: &Client,
@@ -78,29 +78,32 @@ fn tags_to_push(
             "{prefix}{}.{}.{}",
             version.major, version.minor, version.patch
         ));
+    }
+
+    let version_req = VersionReq::parse(&format!(
+        ">{major}.{minor}.{patch}, <{major}.{minor_next}, <{major_next}.0.0",
+        major = version.major,
+        minor = version.minor,
+        patch = version.patch,
+        major_next = version.major + 1,
+        minor_next = version.minor + 1
+    ))
+    .expect("Must be valid version requirement");
+    if !existing_tags
+        .iter()
+        .any(|v| version_req.matches(v))
+    {
+        tags.push(format!("{prefix}{}.{}", version.major, version.minor));
 
         let version_req = VersionReq::parse(&format!(
-            ">={major}.{minor}.{patch}, <{major}.{minor_next}, <{major_next}.0.0",
+            ">{major}.{minor}, <{major_next}.0.0",
             major = version.major,
             minor = version.minor,
-            patch = version.patch,
-            major_next = version.major + 1,
-            minor_next = version.minor + 1
+            major_next = version.major + 1
         ))
         .expect("Must be valid version requirement");
         if !existing_tags.iter().any(|v| version_req.matches(v)) {
-            tags.push(format!("{prefix}{}.{}", version.major, version.minor));
-
-            let version_req = VersionReq::parse(&format!(
-                ">={major}.{minor}, <{major_next}.0.0",
-                major = version.major,
-                minor = version.minor,
-                major_next = version.major + 1
-            ))
-            .expect("Must be valid version requirement");
-            if !existing_tags.iter().any(|v| version_req.matches(v)) {
-                tags.push(format!("{prefix}{}", version.major));
-            }
+            tags.push(format!("{prefix}{}", version.major));
         }
     }
 
@@ -114,7 +117,31 @@ mod tests {
     use super::*;
 
     #[test]
-    fn push_all_tags_for_none_exsting_major_version() {
+    fn push_all_tags_if_no_version_exists() {
+        assert_eq!(
+            tags_to_push(Version::from_str("1.0.0").unwrap(), &[], &None),
+            vec![
+                String::from("1"),
+                String::from("1.0"),
+                String::from("1.0.0")
+            ]
+        );
+    }
+
+    #[test]
+    fn push_major_and_minor_tags_if_only_self_exists() {
+        assert_eq!(
+            tags_to_push(
+                Version::from_str("1.0.0").unwrap(),
+                &[Version::from_str("1.0.0").unwrap()],
+                &None
+            ),
+            vec![String::from("1"), String::from("1.0")]
+        );
+    }
+
+    #[test]
+    fn push_major_and_minor_if_none_exsting_major_version() {
         assert_eq!(
             tags_to_push(
                 Version::from_str("1.2.3").unwrap(),
@@ -130,7 +157,7 @@ mod tests {
     }
 
     #[test]
-    fn push_all_tags_for_none_exsting_major_version_with_prefix() {
+    fn push_major_and_minor_if_none_exsting_major_version_with_prefix() {
         assert_eq!(
             tags_to_push(
                 Version::from_str("1.2.3").unwrap(),
@@ -161,23 +188,14 @@ mod tests {
     }
 
     #[test]
-    fn push_only_patch_tag() {
+    fn push_no_tags_if_later_version_and_self_exists() {
         assert_eq!(
             tags_to_push(
                 Version::from_str("1.2.3").unwrap(),
-                &[Version::from_str("1.2.4").unwrap(),],
-                &None
-            ),
-            vec![String::from("1.2.3")]
-        )
-    }
-
-    #[test]
-    fn push_no_tags() {
-        assert_eq!(
-            tags_to_push(
-                Version::from_str("1.2.3").unwrap(),
-                &[Version::from_str("1.2.3").unwrap(),],
+                &[
+                    Version::from_str("1.2.3").unwrap(),
+                    Version::from_str("1.2.4").unwrap()
+                ],
                 &None
             ),
             Vec::<String>::new()
