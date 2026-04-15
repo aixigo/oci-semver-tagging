@@ -1,3 +1,4 @@
+use crate::PartialSemverVersion;
 use anyhow::{Context, Result};
 use oci_distribution::{secrets::RegistryAuth, Client, Reference};
 use semver::{Version, VersionReq};
@@ -8,41 +9,43 @@ pub async fn tag(
     client: &Client,
     registry_auth: &RegistryAuth,
     image: &Reference,
-    existing_tags: &[Version],
+    existing_tags: &[PartialSemverVersion],
     version_to_tag: Version,
     tag_prefix: &Option<String>,
     dry_run: bool,
 ) -> Result<()> {
-    let tags_to_push = tags_to_push(version_to_tag, existing_tags, &tag_prefix);
+    let tags_to_push = tags_to_push(version_to_tag, existing_tags, tag_prefix);
     if tags_to_push.is_empty() {
         println!("Nothing to push");
         return Ok(());
     }
 
     let (baseline_manifest, _digest) = client
-        .pull_manifest(&image, &registry_auth)
+        .pull_manifest(image, registry_auth)
         .await
         .with_context(|| format!("Cannot pull manifest for {}", image))?;
 
     let mut set = JoinSet::new();
 
     for tag in tags_to_push {
-        let image = Reference::from_str(&format!(
+        let tagged_image = Reference::from_str(&format!(
             "{}/{}:{tag}",
             image.registry(),
             image.repository()
         ))
         .expect("Must be valid image string");
 
-        println!("Will push {image}");
+        println!("Will push manifest of {tagged_image} as copy of {image}");
 
         if !dry_run {
             let client = client.clone();
             let baseline_manifest = baseline_manifest.clone();
             set.spawn(async move {
                 (
-                    client.push_manifest(&image, &baseline_manifest).await,
-                    image,
+                    client
+                        .push_manifest(&tagged_image, &baseline_manifest)
+                        .await,
+                    tagged_image,
                 )
             });
         }
@@ -52,10 +55,10 @@ pub async fn tag(
     while let Some(res) = set.join_next().await {
         match res {
             Ok((Ok(url), image)) => {
-                println!("Pushed {image} to {url}.");
+                println!("Pushed manifest of {image} to {url}.");
             }
             Ok((Err(err), image)) => {
-                println!("Cannot push image {image}: {err}");
+                eprintln!("Cannot push manifest of {image}: {err}");
                 result = Err(err).with_context(|| format!("{image}"));
             }
             Err(_err) => todo!(),
@@ -67,7 +70,7 @@ pub async fn tag(
 
 fn tags_to_push(
     version: Version,
-    existing_tags: &[Version],
+    existing_tags: &[PartialSemverVersion],
     prefix: &Option<String>,
 ) -> Vec<String> {
     let mut tags = Vec::with_capacity(3);
@@ -91,6 +94,7 @@ fn tags_to_push(
     .expect("Must be valid version requirement");
     if !existing_tags
         .iter()
+        .filter_map(|psv| psv.full())
         .any(|v| version_req.matches(v))
     {
         tags.push(format!("{prefix}{}.{}", version.major, version.minor));
@@ -102,7 +106,11 @@ fn tags_to_push(
             major_next = version.major + 1
         ))
         .expect("Must be valid version requirement");
-        if !existing_tags.iter().any(|v| version_req.matches(v)) {
+        if !existing_tags
+            .iter()
+            .filter_map(|psv| psv.full())
+            .any(|v| version_req.matches(v))
+        {
             tags.push(format!("{prefix}{}", version.major));
         }
     }
@@ -133,7 +141,7 @@ mod tests {
         assert_eq!(
             tags_to_push(
                 Version::from_str("1.0.0").unwrap(),
-                &[Version::from_str("1.0.0").unwrap()],
+                &[PartialSemverVersion::from_str("1.0.0").unwrap()],
                 &None
             ),
             vec![String::from("1"), String::from("1.0")]
@@ -145,7 +153,7 @@ mod tests {
         assert_eq!(
             tags_to_push(
                 Version::from_str("1.2.3").unwrap(),
-                &[Version::from_str("3.2.1").unwrap()],
+                &[PartialSemverVersion::from_str("3.2.1").unwrap()],
                 &None
             ),
             vec![
@@ -161,7 +169,7 @@ mod tests {
         assert_eq!(
             tags_to_push(
                 Version::from_str("1.2.3").unwrap(),
-                &[Version::from_str("3.2.1").unwrap()],
+                &[PartialSemverVersion::from_str("3.2.1").unwrap()],
                 &Some(String::from("v")),
             ),
             vec![
@@ -178,8 +186,8 @@ mod tests {
             tags_to_push(
                 Version::from_str("1.2.3").unwrap(),
                 &[
-                    Version::from_str("1.3.3").unwrap(),
-                    Version::from_str("3.2.1").unwrap()
+                    PartialSemverVersion::from_str("1.3.3").unwrap(),
+                    PartialSemverVersion::from_str("3.2.1").unwrap()
                 ],
                 &None
             ),
@@ -193,8 +201,8 @@ mod tests {
             tags_to_push(
                 Version::from_str("1.2.3").unwrap(),
                 &[
-                    Version::from_str("1.2.3").unwrap(),
-                    Version::from_str("1.2.4").unwrap()
+                    PartialSemverVersion::from_str("1.2.3").unwrap(),
+                    PartialSemverVersion::from_str("1.2.4").unwrap()
                 ],
                 &None
             ),

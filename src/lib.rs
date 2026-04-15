@@ -1,9 +1,15 @@
 use anyhow::{anyhow, Context, Result};
 use clap::{Parser, ValueEnum};
-use oci_distribution::{client::{ClientConfig, ClientProtocol}, secrets::RegistryAuth, Client, Reference};
+use oci_distribution::{
+    client::{ClientConfig, ClientProtocol},
+    secrets::RegistryAuth,
+    Client, Reference,
+};
+pub use partial_semver::PartialSemverVersion;
 use semver::Version;
 use std::str::FromStr;
 
+mod partial_semver;
 mod tag;
 
 #[derive(Parser, Debug, PartialEq)]
@@ -112,12 +118,12 @@ fn version_to_tag(
     }
 }
 
-async fn present_semver_tags(
+async fn present_partial_semver_tags(
     client: &Client,
     registry_auth: &RegistryAuth,
     image: &Reference,
     prefix: &Option<String>,
-) -> Result<Vec<Version>> {
+) -> Result<Vec<PartialSemverVersion>> {
     let tag_respones = client
         .list_tags(image, registry_auth, None, None)
         .await
@@ -136,7 +142,7 @@ async fn present_semver_tags(
                     tag.trim_start_matches(prefix)
                 }
             };
-            Version::from_str(tag).ok()
+            PartialSemverVersion::from_str(tag).ok()
         })
         .collect())
 }
@@ -162,7 +168,7 @@ pub async fn run(args: Args) -> Result<()> {
         } => {
             let version_to_tag = version_to_tag(&image, tag_version, &tag_prefix)?;
 
-            let existing_tags = present_semver_tags(
+            let existing_tags = present_partial_semver_tags(
                 &client,
                 &registry_auth,
                 &Reference::from_str(&format!("{}/{}", image.registry(), image.repository(),))

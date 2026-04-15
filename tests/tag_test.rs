@@ -62,18 +62,21 @@ async fn tag_with_multi_architectures() -> anyhow::Result<()> {
     log::info!("Tag postgres with semver tags");
     let args = Args::parse_from([
         "oci-semver-tagging",
-        "--protocol", "http",
+        "--protocol",
+        "http",
         "tag",
         &format!("localhost:{local_registry_port}/postgres:16.8.0"),
     ]);
     run(args).await?;
 
     log::info!("Inspect tags created by oci-semver-tagging");
-    let inspection_16_8_0 = dbg!(inspect(
-        network,
-        &format!("docker://{registry_host}:5000/postgres:16.8.0"),
-    )
-    .await?);
+    let inspection_16_8_0 = dbg!(
+        inspect(
+            network,
+            &format!("docker://{registry_host}:5000/postgres:16.8.0"),
+        )
+        .await?
+    );
     let inspection_16_8 = inspect(
         network,
         &format!("docker://{registry_host}:5000/postgres:16.8"),
