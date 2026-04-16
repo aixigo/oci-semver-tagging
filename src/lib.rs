@@ -11,6 +11,7 @@ use std::str::FromStr;
 
 mod partial_semver;
 mod tag;
+mod validate;
 
 #[derive(Parser, Debug, PartialEq)]
 #[command(version, about, long_about = None)]
@@ -44,7 +45,13 @@ enum SubCommands {
         dry_run: bool,
     },
     /// Validates the existing tags if they are tagged according to the semantic versioning
-    Validate,
+    Validate {
+        /// The image of which the partial semver tags shall be validated
+        image: Reference,
+        /// A prefix that will be put in front of the tags to be validated.
+        #[arg(short, long)]
+        tag_prefix: Option<String>,
+    },
 }
 
 #[derive(clap::Args, Debug, PartialEq)]
@@ -159,7 +166,18 @@ pub async fn run(args: Args) -> Result<()> {
     let registry_auth = args.registry_auth()?;
 
     match args.sub_command {
-        SubCommands::Validate => todo!(),
+        SubCommands::Validate { image, tag_prefix } => {
+            let existing_tags = present_partial_semver_tags(
+                &client,
+                &registry_auth,
+                &Reference::from_str(&format!("{}/{}", image.registry(), image.repository(),))
+                    .expect("Must be valid image string"),
+                &tag_prefix,
+            )
+            .await?;
+
+            validate::validate(&client, &registry_auth, &image, &tag_prefix, &existing_tags).await
+        }
         SubCommands::Tag {
             image,
             tag_version,
