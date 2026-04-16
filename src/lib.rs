@@ -28,9 +28,13 @@ pub struct Args {
     sub_command: SubCommands,
 }
 
+
+/// Provides partial semver tagging for OCI image distribution so that a semver based image tags can
+/// also be provided with moving partial semver tags. For example, the latest release 1.2.3 can be
+/// available under 1 and 1.2 while there is also 1.1 and 1.0.
 #[derive(Parser, Debug, PartialEq)]
 enum SubCommands {
-    /// Tags the given images with semantic version tags
+    /// Tags the given image with partial semantic version tags
     Tag {
         /// The image that shall be tagged with semantic version tags.
         image: Reference,
@@ -44,7 +48,7 @@ enum SubCommands {
         #[arg(short, long, default_value = "false")]
         dry_run: bool,
     },
-    /// Validates the existing tags if they are tagged according to the semantic versioning
+    /// Validates if the existing tags partially semver tagged according to the tag command.
     Validate {
         /// The image of which the partial semver tags shall be validated
         image: Reference,
