@@ -2,6 +2,7 @@ use crate::PartialSemverVersion;
 use anyhow::{Context, Result};
 use oci_distribution::{manifest::OciManifest, secrets::RegistryAuth, Client, Reference};
 use semver::Version;
+use sha2::Digest;
 use std::{
     collections::{BTreeMap, BTreeSet, HashMap},
     fmt::Display,
@@ -51,6 +52,9 @@ enum ValidationError {
         should_point_to: Version,
         pointing_to_instead: Version,
     },
+    FullVersionsPointingToSameManifests {
+        versions: Vec<Version>,
+    },
 }
 
 impl Display for ValidationError {
@@ -63,6 +67,7 @@ impl Display for ValidationError {
                 should_point_to,
                 pointing_to_instead,
             } => write!(f,"The {major_or_major_minor} tag points to {pointing_to_instead} instead to {should_point_to}"),
+            Self::FullVersionsPointingToSameManifests { versions } => write!(f,"The tags {} point to the same manifest", versions.iter().map(ToString::to_string).collect::<Vec<_>>().join(", ")),
         }
     }
 }
@@ -77,6 +82,29 @@ fn detect_miss_placed_tags(
     );
 
     let mut errors = Vec::new();
+
+    let mut duplicate_versions = BTreeMap::<Vec<u8>, Vec<Version>>::new();
+    for (version, manifest) in manifests
+        .iter()
+        .filter_map(|(psv, manifest)| Some((psv.full()?, manifest)))
+    {
+        let manifest_hash = sha2::Sha256::digest(serde_json::to_string(manifest).unwrap())
+            .iter()
+            .cloned()
+            .collect::<Vec<u8>>();
+        duplicate_versions
+            .entry(manifest_hash)
+            .and_modify(|e| {
+                e.push(version.clone());
+            })
+            .or_insert_with(|| vec![version.clone()]);
+    }
+    errors.extend(
+        duplicate_versions
+            .into_values()
+            .filter(|versions| versions.len() > 1)
+            .map(|versions| ValidationError::FullVersionsPointingToSameManifests { versions }),
+    );
 
     let mut manifests_grouped_by_major =
         HashMap::<PartialSemverVersion, BTreeMap<Version, &OciManifest>>::new();
@@ -887,6 +915,42 @@ mod tests {
                 major_or_major_minor: PartialSemverVersion::with_major_minor(32, 0),
                 should_point_to: Version::new(32, 0, 1),
                 pointing_to_instead: Version::new(32, 0, 0)
+            },])
+        );
+    }
+
+    #[test]
+    fn detect_duplicate_versions() {
+        assert_eq!(
+            detect_miss_placed_tags(
+                &[
+                    PartialSemverVersion::with_major(32),
+                    PartialSemverVersion::with_major_minor(32, 0),
+                    PartialSemverVersion::from(Version::new(32, 0, 0)),
+                    PartialSemverVersion::from(Version::new(32, 0, 1))
+                ],
+                BTreeMap::from([
+                    (
+                        PartialSemverVersion::from(Version::new(32, 0, 0)),
+                        nextcloud_32_0_1_manifest(),
+                    ),
+                    (
+                        PartialSemverVersion::from(Version::new(32, 0, 1)),
+                        nextcloud_32_0_1_manifest(),
+                    ),
+                    (
+                        PartialSemverVersion::with_major_minor(32, 0),
+                        // should have been 32_0_1
+                        nextcloud_32_0_1_manifest(),
+                    ),
+                    (
+                        PartialSemverVersion::with_major(32),
+                        nextcloud_32_0_1_manifest(),
+                    )
+                ]),
+            ),
+            Err(vec![ValidationError::FullVersionsPointingToSameManifests {
+                versions: vec![Version::new(32, 0, 0), Version::new(32, 0, 1),]
             },])
         );
     }
