@@ -28,7 +28,6 @@ pub struct Args {
     sub_command: SubCommands,
 }
 
-
 /// Provides partial semver tagging for OCI image distribution so that a semver based image tags can
 /// also be provided with moving partial semver tags. For example, the latest release 1.2.3 can be
 /// available under 1 and 1.2 while there is also 1.1 and 1.0.

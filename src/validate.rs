@@ -4,6 +4,7 @@ use oci_distribution::{manifest::OciManifest, secrets::RegistryAuth, Client, Ref
 use semver::Version;
 use std::{
     collections::{BTreeMap, BTreeSet, HashMap},
+    fmt::Display,
     str::FromStr,
 };
 use tokio::task::JoinSet;
@@ -39,16 +40,31 @@ pub async fn validate(
 
 #[derive(thiserror::Error, Debug, PartialEq, Eq)]
 enum ValidationError {
-    #[error("There is no partial major tag for {latest_version}")]
-    MissingMajor { latest_version: Version },
-    #[error("There is no partial major.minor tag for {latest_version}")]
-    MissingMajorMinor { latest_version: Version },
-    #[error("The {major_or_major_minor} tag points to {pointing_to_instead} instead to {should_point_to}")]
+    MissingMajor {
+        latest_version: Version,
+    },
+    MissingMajorMinor {
+        latest_version: Version,
+    },
     MissPlaced {
         major_or_major_minor: PartialSemverVersion,
         should_point_to: Version,
         pointing_to_instead: Version,
     },
+}
+
+impl Display for ValidationError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::MissingMajor { latest_version } => write!(f,"There is no partial major tag '{}' for '{latest_version}'", PartialSemverVersion::from(latest_version.clone()).to_major()),
+            Self::MissingMajorMinor { latest_version } => write!(f,"There is no partial major.minor tag '{}' for {latest_version}", PartialSemverVersion::from(latest_version.clone()).to_major_minor().unwrap()),
+            Self::MissPlaced {
+                major_or_major_minor,
+                should_point_to,
+                pointing_to_instead,
+            } => write!(f,"The {major_or_major_minor} tag points to {pointing_to_instead} instead to {should_point_to}"),
+        }
+    }
 }
 
 fn detect_miss_placed_tags(
@@ -557,6 +573,162 @@ mod tests {
         })).unwrap()
     }
 
+    fn nextcloud_32_0_2_manifest() -> OciManifest {
+        serde_json::from_value(serde_json::json!({
+           "schemaVersion": 2,
+           "mediaType": "application/vnd.oci.image.index.v1+json",
+           "manifests": [
+              {
+                 "mediaType": "application/vnd.oci.image.manifest.v1+json",
+                 "size": 5336,
+                 "digest": "sha256:4f0ea71dbe72cae030fa8de9dda67c728eab189becf27e40f6a380c47789ac47",
+                 "platform": {
+                    "architecture": "amd64",
+                    "os": "linux"
+                 }
+              },
+              {
+                 "mediaType": "application/vnd.oci.image.manifest.v1+json",
+                 "size": 567,
+                 "digest": "sha256:586fab872e04a76eab9c8e4e6623e65fbb95a779eae7620c25af3ff963f77c71",
+                 "platform": {
+                    "architecture": "unknown",
+                    "os": "unknown"
+                 }
+              },
+              {
+                 "mediaType": "application/vnd.oci.image.manifest.v1+json",
+                 "size": 5337,
+                 "digest": "sha256:b4c50ac8a940fcf4fda405323035ef03c26b59572625f9a9d9f71970ecde8769",
+                 "platform": {
+                    "architecture": "arm",
+                    "os": "linux",
+                    "variant": "v5"
+                 }
+              },
+              {
+                 "mediaType": "application/vnd.oci.image.manifest.v1+json",
+                 "size": 567,
+                 "digest": "sha256:572cf2fa3c346620e0ef2efeadf9f0341a550550418c66a60666514a553b93f7",
+                 "platform": {
+                    "architecture": "unknown",
+                    "os": "unknown"
+                 }
+              },
+              {
+                 "mediaType": "application/vnd.oci.image.manifest.v1+json",
+                 "size": 5337,
+                 "digest": "sha256:58f656f5a7682e92540cd3ffeebfb91a50d8d992d62a49b8c720cb3eb2905620",
+                 "platform": {
+                    "architecture": "arm",
+                    "os": "linux",
+                    "variant": "v7"
+                 }
+              },
+              {
+                 "mediaType": "application/vnd.oci.image.manifest.v1+json",
+                 "size": 567,
+                 "digest": "sha256:7a580b58547e8eab894ba8167d0bf4f5e00fb6b32f74e3add0969adfc856c9af",
+                 "platform": {
+                    "architecture": "unknown",
+                    "os": "unknown"
+                 }
+              },
+              {
+                 "mediaType": "application/vnd.oci.image.manifest.v1+json",
+                 "size": 5338,
+                 "digest": "sha256:ffa8ff44fb01593706611c1eea21f35cc429fb9ff43d502ccf38de77665d7c8c",
+                 "platform": {
+                    "architecture": "arm64",
+                    "os": "linux",
+                    "variant": "v8"
+                 }
+              },
+              {
+                 "mediaType": "application/vnd.oci.image.manifest.v1+json",
+                 "size": 567,
+                 "digest": "sha256:6c0e5336d9542889e8b079a495ec34628d871543a7760b010cde2e5786ef47ff",
+                 "platform": {
+                    "architecture": "unknown",
+                    "os": "unknown"
+                 }
+              },
+              {
+                 "mediaType": "application/vnd.oci.image.manifest.v1+json",
+                 "size": 5335,
+                 "digest": "sha256:401c178e39664d27a50d77c4d8f512d8ee98ca1315adb35541c8209266e13261",
+                 "platform": {
+                    "architecture": "386",
+                    "os": "linux"
+                 }
+              },
+              {
+                 "mediaType": "application/vnd.oci.image.manifest.v1+json",
+                 "size": 567,
+                 "digest": "sha256:a1dad8a6958bd4e04f6b5b766893db39b8c51736f8397e646f9e4aaec0b22c30",
+                 "platform": {
+                    "architecture": "unknown",
+                    "os": "unknown"
+                 }
+              },
+              {
+                 "mediaType": "application/vnd.oci.image.manifest.v1+json",
+                 "size": 5338,
+                 "digest": "sha256:a3c712461c3821c76343ff044078f9e812c700930d72e26fada4634eccdff7bb",
+                 "platform": {
+                    "architecture": "ppc64le",
+                    "os": "linux"
+                 }
+              },
+              {
+                 "mediaType": "application/vnd.oci.image.manifest.v1+json",
+                 "size": 567,
+                 "digest": "sha256:8adfb3ee4f8559b616cd38cfe3d32f9a514dbb91f802f49408a50180cace0b05",
+                 "platform": {
+                    "architecture": "unknown",
+                    "os": "unknown"
+                 }
+              },
+              {
+                 "mediaType": "application/vnd.oci.image.manifest.v1+json",
+                 "size": 5338,
+                 "digest": "sha256:0bd042ed7b64a9c1ce0ff38e100d0626d5727601d0ae67447d868ffc73af005b",
+                 "platform": {
+                    "architecture": "riscv64",
+                    "os": "linux"
+                 }
+              },
+              {
+                 "mediaType": "application/vnd.oci.image.manifest.v1+json",
+                 "size": 567,
+                 "digest": "sha256:9ebc4d8e79499c0957c3c8370d8c8bc6c6664c7d2b7d2fe585a73d8997e79715",
+                 "platform": {
+                    "architecture": "unknown",
+                    "os": "unknown"
+                 }
+              },
+              {
+                 "mediaType": "application/vnd.oci.image.manifest.v1+json",
+                 "size": 5335,
+                 "digest": "sha256:8d03aa09137f89ad4fcd7e8c74a889aaffba2683b08e770a9de000a8de6fdc11",
+                 "platform": {
+                    "architecture": "s390x",
+                    "os": "linux"
+                 }
+              },
+              {
+                 "mediaType": "application/vnd.oci.image.manifest.v1+json",
+                 "size": 567,
+                 "digest": "sha256:544d912a0031fb5aaab39d152d13b67e2fb337c1537158e188a9bfed6747056e",
+                 "platform": {
+                    "architecture": "unknown",
+                    "os": "unknown"
+                 }
+              }
+           ]
+        })).unwrap()
+    }
+
     #[test]
     fn detect_missisng_partial_semver_tags() {
         assert_eq!(
@@ -585,7 +757,8 @@ mod tests {
                 &[
                     PartialSemverVersion::with_major_minor(32, 0),
                     PartialSemverVersion::from(Version::new(32, 0, 0)),
-                    PartialSemverVersion::from(Version::new(32, 0, 1))
+                    PartialSemverVersion::from(Version::new(32, 0, 1)),
+                    PartialSemverVersion::from(Version::new(32, 0, 2)),
                 ],
                 BTreeMap::from([
                     (
@@ -597,13 +770,17 @@ mod tests {
                         nextcloud_32_0_1_manifest(),
                     ),
                     (
+                        PartialSemverVersion::from(Version::new(32, 0, 2)),
+                        nextcloud_32_0_2_manifest(),
+                    ),
+                    (
                         PartialSemverVersion::with_major_minor(32, 0),
-                        nextcloud_32_0_1_manifest(),
+                        nextcloud_32_0_2_manifest(),
                     )
                 ]),
             ),
             Err(vec![ValidationError::MissingMajor {
-                latest_version: Version::new(32, 0, 1)
+                latest_version: Version::new(32, 0, 2)
             },])
         );
     }
@@ -714,4 +891,3 @@ mod tests {
         );
     }
 }
-
